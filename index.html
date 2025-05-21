@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多設備共享版服藥記錄表單</title>
+    <!-- 引入Tailwind CSS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
+    <style>
+        :root {
+            --abilify-color: #4f46e5;
+            --abilify-light: #eef2ff;
+            --ritalin-color: #0ea5e9;
+            --ritalin-light: #e0f2fe;
+            --highlight-color: #8b5cf6;
+        }
+        body {
+            background-color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .header-gradient {
+            background: linear-gradient(135deg, var(--abilify-color), var(--ritalin-color));
+            color: white;
+            border-radius: 12px 12px 0 0;
+            padding: 15px;
+            margin-bottom: 0;
+        }
+        .form-panel {
+            border-left: 5px solid var(--highlight-color);
+        }
+        .abilify-bg {
+            background-color: var(--abilify-light);
+            border-left: 4px solid var(--abilify-color);
+        }
+        .ritalin-bg {
+            background-color: var(--ritalin-light);
+            border-left: 4px solid var(--ritalin-color);
+        }
+        .btn-abilify {
+            background-color: var(--abilify-color);
+            color: white;
+        }
+        .btn-abilify:hover {
+            background-color: #4338ca;
+        }
+        .btn-ritalin {
+            background-color: var(--ritalin-color);
+            color: white;
+        }
+        .btn-ritalin:hover {
+            background-color: #0284c7;
+        }
+        .record-item {
+            transition: all 0.2s ease;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .record-item:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255,255,255,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .loading-spinner {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid var(--highlight-color);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @media print {
+            .no-print {
+                display: none;
+            }
+            body {
+                background-color: white;
+            }
+            .container {
+                max-width: 100%;
+                padding: 0;
+            }
+            .header-gradient {
+                background: none;
+                color: black;
+                padding: 0;
+                margin-bottom: 20px;
+            }
+            .record-item {
+                break-inside: avoid;
+                page-break-inside: avoid;
+                border: 1px solid #ddd;
+                margin-bottom: 15px;
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 載入中動畫 -->
+    <div id="loading" class="loading">
+        <div>
+            <div class="loading-spinner"></div>
+            <p class="mt-3 text-center text-gray-600">載入中...</p>
+        </div>
+    </div>
+
+    <div class="container p-4">
+        <div class="bg-white rounded-lg shadow-lg my-6">
+            <h1 class="text-2xl font-bold text-center header-gradient">線上服藥記錄表單</h1>
+            
+            <!-- 共享ID設置 -->
+            <div class="p-4 bg-purple-50 border-b border-purple-100 no-print">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-sm font-medium text-purple-700">共享代碼:</span>
+                    <input 
+                        type="text" 
+                        id="shareCodeInput" 
+                        class="p-1 border border-purple-300 rounded text-sm"
+                        placeholder="輸入共享代碼"
+                    >
+                    <button 
+                        id="connectBtn" 
+                        class="bg-purple-600 hover:bg-purple-700 text-white text-sm py-1 px-3 rounded"
+                    >
+                        連接
+                    </button>
+                    <button 
+                        id="createNewBtn" 
+                        class="bg-green-600 hover:bg-green-700 text-white text-sm py-1 px-3 rounded"
+                    >
+                        創建新共享
+                    </button>
+                    <span id="currentCodeDisplay" class="ml-auto text-sm text-purple-700 font-medium"></span>
+                </div>
+                <p id="shareInstructions" class="text-xs text-gray-500 mt-2">
+                    使用共享代碼讓家人一起記錄服藥情況。在其他設備上輸入相同代碼即可同步數據。
+                </p>
+            </div>
+            
+            <!-- 輸入區域 -->
+            <div class="p-6 no-print">
+                <div class="form-panel bg-gray-50 p-5 rounded-lg mb-8">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">藥物選擇</label>
+                        <select id="medicationId" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-300 focus:border-purple-300">
+                            <option value="abilify">ABILIFY TAB 5 MG (ARIPIPRAZOLE) (大塚安立復錠5毫克)</option>
+                            <option value="ritalin">RITALIN TAB 10 MG (METHYLPHENIDATE HCL) (利他能錠10毫克)</option>
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">日期</label>
+                            <input type="date" id="date" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-300 focus:border-purple-300">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">時間</label>
+                            <input type="time" id="time" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-300 focus:border-purple-300">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <div class="flex items-center">
+                            <input type="checkbox" id="taken" class="h-5 w-5 text-purple-600 rounded focus:ring-purple-500">
+                            <label for="taken" class="ml-2 block text-sm font-medium text-gray-700">
+                                已服藥
+                            </label>
+                        </div>
+                    </div>
+
+                    <div id="medicationInfo" class="mb-4 p-4 rounded-lg">
+                        <!-- 藥物資訊將由JavaScript動態填充 -->
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">備註</label>
+                        <textarea id="notes" rows="3" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-300 focus:border-purple-300" placeholder="補充說明（如：實際服用劑量、服藥感受等）"></textarea>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">記錄者</label>
+                        <input type="text" id="recorder" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-300 focus:border-purple-300" placeholder="請輸入您的姓名或稱呼">
+                    </div>
+                    
+                    <button id="addRecord" class="w-full bg-highlight-color hover:bg-purple-700 text-white font-medium py-3 px-4 rounded-lg transition duration-200" style="background-color: var(--highlight-color);">
+                        添加記錄
+                    </button>
+                    
+                    <div class="flex justify-between mt-4">
+                        <button id="exportRecords" class="bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg transition duration-200">
+                            匯出記錄
+                        </button>
+                        <button id="importRecords" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition duration-200">
+                            匯入記錄
+                        </button>
+                        <button id="printRecords" class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition duration-200">
+                            列印記錄
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 記錄列表 -->
+                <div>
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-xl font-semibold mb-4 text-gray-800">歷史記錄</h2>
+                        <button id="refreshBtn" class="text-blue-600 hover:text-blue-800 text-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            刷新
+                        </button>
+                    </div>
+                    <div id="syncStatus" class="text-sm text-gray-500 mb-2"></div>
+                    <div id="recordsList" class="space-y-4">
+                        <!-- 記錄將由JavaScript動態填充 -->
+                    </div>
+                </div>
+
+                <!-- 注意事項區 -->
+                <div class="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <h3 class="text-lg font-medium text-yellow-800 mb-2">藥物注意事項</h3>
+                    <div class="mb-4">
+                        <h4 class="font-medium text-gray-800">ABILIFY (大塚安立復錠)</h4>
+                        <ul class="list-disc pl-5 text-sm text-gray-700 space-y-1">
+                            <li>可空腹或隨餐(飯後立即)服用</li>
+                            <li>用藥期間開車或操作機械請小心</li>
+                            <li>用藥期間請勿飲酒</li>
+                            <li>避免劇烈運動或曝露於過熱環境</li>
+                            <li>按照醫囑確實服藥，不可自行停用</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="font-medium text-gray-800">RITALIN (利他能錠)</h4>
+                        <ul class="list-disc pl-5 text-sm text-gray-700 space-y-1">
+                            <li>於飯前30至45分鐘服用</li>
+                            <li>請於晚上六點前服用</li>
+                            <li>請遵醫囑服用</li>
+                            <li>不可擅自停藥</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 藥物資料
+        const medications = {
+            abilify: {
+                id: "abilify",
+                name: "ABILIFY TAB 5 MG (ARIPIPRAZOLE)",
+                chineseName: "大塚安立復錠5毫克",
+                dosage: "睡前使用，每次0.5粒",
+                indications: "精神疾患、亞斯伯格症",
+                sideEffects: "體重增加、想睡或頭痛等情形",
+                precautions: "可空腹或隨餐(飯後立即)服用、用藥期間開車或操作機械請小心、用藥期間請勿飲酒、避免劇烈運動或曝露於過熱環境、按照醫囑確實服藥",
+                colorClass: "abilify-bg"
+            },
+            ritalin: {
+                id: "ritalin",
+                name: "RITALIN TAB 10 MG (METHYLPHENIDATE HCL)",
+                chineseName: "利他能錠10毫克",
+                dosage: "每日一次早上7時使用，每次1粒",
+                indications: "過動兒症候群、發作性嗜睡症",
+                sideEffects: "食慾降低、腹痛、體重減輕、視力模糊",
+                precautions: "於飯前30至45分鐘服用、請於晚上六點前服用、請遵醫囑服用",
+                colorClass: "ritalin-bg"
+            }
+        };
+
+        // DOM元素
+        const elements = {
+            medicationId: document.getElementById('medicationId'),
+            date: document.getElementById('date'),
+            time: document.getElementById('time'),
+            taken: document.getElementById('taken'),
+            notes: document.getElementById('notes'),
+            recorder: document.getElementById('recorder'),
+            addRecord: document.getElementById('addRecord'),
+            exportRecords: document.getElementById('exportRecords'),
+            importRecords: document.getElementById('importRecords'),
+            printRecords: document.getElementById('printRecords'),
+            recordsList: document.getElementById('recordsList'),
+            medicationInfo: document.getElementById('medicationInfo'),
+            loading: document.getElementById('loading'),
+            shareCodeInput: document.getElementById('shareCodeInput'),
+            connectBtn: document.getElementById('connectBtn'),
+            createNewBtn: document.getElementById('createNewBtn'),
+            currentCodeDisplay: document.getElementById('currentCodeDisplay'),
+            shareInstructions: document.getElementById('shareInstructions'),
+            syncStatus: document.getElementById('syncStatus'),
+            refreshBtn: document.getElementById('refreshBtn')
+        };
+
+        // Firebase 相容的UUID生成器 (用於生成共享代碼)
+        function generateUuid(length = 8) {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            let result = '';
+            for (let i = 0; i < length; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        }
+
+        // 雲端存儲 API
+        const cloudAPI = {
+            // 因為JSONBin.io有請求限制，這裡使用Firebase Realtime Database API
+            // 使用公共REST API而不需要Firebase SDK
+            baseUrl: 'https://medication-tracker-app-default-rtdb.firebaseio.com',
+            currentBinId: null,
+            
+            // 創建新的共享
+            async createBin(initialData) {
+                try {
+                    showLoading('創建共享中...');
+                    // 生成一個唯一ID
+                    const binId = generateUuid(8);
+                    
+                    // 保存到Firebase
+                    const response = await fetch(`${this.baseUrl}/records/${binId}.json`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(initialData)
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('創建共享失敗');
+                    }
+                    
+                    return binId;
+                } catch (error) {
+                    console.error('創建共享失敗:', error);
+                    throw error;
+                } finally {
+                    hideLoading();
+                }
+            },
+            
+            // 獲取共享數據
+            async getBin(binId) {
+                try {
+                    showLoading('讀取數據中...');
+                    const response = await fetch(`${this.baseUrl}/records/${binId}.json`, {
+                        method: 'GET'
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('讀取數據失敗');
+                    }
+                    
+                    const data = await response.json();
+                    if (data === null) {
+                        throw new Error('共享數據不存在');
+                    }
+                    
+                    updateSyncStatus('最後同步: ' + new Date().toLocaleString());
+                    return data;
+                } catch (error) {
+                    console.error('讀取數據失敗:', error);
+                    throw error;
+                } finally {
+                    hideLoading();
+                }
+            },
+            
+            // 更新共享數據
+            async updateBin(binId, data) {
+                try {
+                    showLoading('保存數據中...');
+                    const response = await fetch(`${this.baseUrl}/records/${binId}.json`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(data)
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('更新數據失敗');
+                    }
+                    
+                    updateSyncStatus('最後同步: ' + new Date().toLocaleString());
+                    return await response.json();
+                } catch (error) {
+                    console.error('更新數據失敗:', error);
+                    throw error;
+                } finally {
+                    hideLoading();
+                }
+            }
+        };
+
+        // 顯示載入中動畫
+        function showLoading(message = '載入中...') {
+            elements.loading.querySelector('p').textContent = message;
+            elements.loading.style.display = 'flex';
+        }
+
+        // 隱藏載入中動畫
+        function hideLoading() {
+            elements.loading.style.display = 'none';
+        }
+
+        // 更新同步狀態
+        function updateSyncStatus(message) {
+            elements.syncStatus.textContent = message;
+        }
+
+        // 共享數據操作
+        const sharedData = {
+            // 創建新的共享
+            async createNew() {
+                try {
+                    // 創建一個空的記錄集
+                    const initialData = { records: [] };
+                    const binId = await cloudAPI.createBin(initialData);
+                    
+                    // 保存binId到localStorage
+                    localStorage.setItem('medicationTrackerBinId', binId);
+                    
+                    // 更新UI
+                    elements.currentCodeDisplay.textContent = `當前代碼: ${binId}`;
+                    elements.shareCodeInput.value = binId;
+                    cloudAPI.currentBinId = binId;
+                    
+                    alert(`成功創建共享! 您的共享代碼是: ${binId}\n請記下此代碼並分享給需要協同記錄的家人。`);
+                    
+                    return binId;
+                } catch (error) {
+                    alert('創建共享失敗，請檢查網絡連接並重試。');
+                    console.error(error);
+                    return null;
+                }
+            },
+            
+            // 連接到現有共享
+            async connect(binId) {
+                try {
+                    if (!binId) {
+                        throw new Error('請輸入有效的共享代碼');
+                    }
+                    
+                    // 測試連接
+                    await cloudAPI.getBin(binId);
+                    
+                    // 保存binId到localStorage
+                    localStorage.setItem('medicationTrackerBinId', binId);
+                    
+                    // 更新UI
+                    elements.currentCodeDisplay.textContent = `當前代碼: ${binId}`;
+                    cloudAPI.currentBinId = binId;
+                    
+                    // 刷新記錄
+                    await this.refreshRecords();
+                    
+                    alert('成功連接到共享!');
+                    return true;
+                } catch (error) {
+                    alert('連接失敗，請檢查共享代碼是否正確。');
+                    console.error(error);
+                    return false;
+                }
+            },
+            
+            // 加載記錄
+            async loadRecords() {
+                try {
+                    if (!cloudAPI.currentBinId) {
+                        return [];
+                    }
+                    
+                    const data = await cloudAPI.getBin(cloudAPI.currentBinId);
+                    return data.records || [];
+                } catch (error) {
+                    console.error('加載記錄失敗:', error);
+                    alert('加載記錄失敗，請檢查網絡連接並重試。');
+                    return [];
+                }
+            },
+            
+            // 保存記錄
+            async saveRecords(records) {
+                try {
+                    if (!cloudAPI.currentBinId) {
+                        throw new Error('未設置共享代碼');
+                    }
+                    
+                    await cloudAPI.updateBin(cloudAPI.currentBinId, { records });
+                    return true;
+                } catch (error) {
+                    console.error('保存記錄失敗:', error);
+                    alert('保存記錄失敗，請檢查網絡連接並重試。');
+                    return false;
+                }
+            },
+            
+            // 刷新記錄
+            async refreshRecords() {
+                try {
+                    const records = await this.loadRecords();
+                    renderRecords(records);
+                    return true;
+                } catch (error) {
+                    console.error('刷新記錄失敗:', error);
+                    return false;
+                }
+            }
+        };
+
+        // 初始化日期和時間
+        function initializeDateAndTime() {
+            const now = new Date();
+            elements.date.value = now.toISOString().slice(0, 10);
+            elements.time.value = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // 從localStorage加載記錄者名稱
+        function loadRecorderName() {
+            const name = localStorage.getItem('medicationTrackerRecorderName');
+            if (name) {
+                elements.recorder.value = name;
+            }
+        }
+
+        // 更新藥物資訊顯示
+        function updateMedicationInfo() {
+            const selectedMedication = medications[elements.medicationId.value];
+            elements.medicationInfo.className = `mb-4 p-4 rounded-lg ${selectedMedication.colorClass}`;
+            elements.medicationInfo.innerHTML = `
+                <h3 class="font-medium mb-1 text-gray-800">用藥資訊</h3>
+                <p class="text-sm text-gray-700"><strong>劑量:</strong> ${selectedMedication.dosage}</p>
+                <p class="text-sm text-gray-700"><strong>適應症:</strong> ${selectedMedication.indications}</p>
+                <p class="text-sm text-gray-700"><strong>可能副作用:</strong> ${selectedMedication.sideEffects}</p>
+            `;
+        }
+
+        // 渲染記錄列表
+        function renderRecords(records) {
+            if (!records || records.length === 0) {
+                elements.recordsList.innerHTML = '<p class="text-gray-500 text-center p-4">尚無服藥記錄</p>';
+                return;
+            }
+            
+            elements.recordsList.innerHTML = records.map(record => `
+                <div class="record-item p-4 border ${medications[record.medicationId] ? medications[record.medicationId].colorClass : 'bg-gray-50'}">
+                    <div class="flex justify-between items-start">
+                        <div class="w-full">
+                            <div class="flex flex-wrap items-center justify-between">
+                                <div>
+                                    <span class="font-medium">${record.date} ${record.time}</span>
+                                    <span class="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                        record.taken ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                    }">
+                                        ${record.taken ? '已服藥' : '未服藥'}
+                                    </span>
+                                </div>
+                                <button class="delete-record text-red-500 hover:text-red-700 no-print" data-id="${record.id}">
+                                    刪除
+                                </button>
+                            </div>
+                            
+                            <div class="mt-2">
+                                <p class="text-sm font-medium text-gray-900">${record.medicationName}</p>
+                                <p class="text-xs text-gray-600">${record.medicationChineseName}</p>
+                            </div>
+                            
+                            ${record.notes ? `
+                                <div class="mt-2 p-2 bg-white bg-opacity-70 rounded border border-gray-200">
+                                    <p class="text-sm text-gray-600"><strong>備註:</strong> ${record.notes}</p>
+                                </div>
+                            ` : ''}
+                            
+                            ${record.recorder ? `
+                                <div class="mt-2 text-xs text-gray-500">
+                                    記錄者: ${record.recorder}
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            
+            // 添加刪除按鈕的事件監聽器
+            document.querySelectorAll('.delete-record').forEach(button => {
+                button.addEventListener('click', function() {
+                    deleteRecord(this.dataset.id);
+                });
+            });
+        }
+
+        // 添加記錄
+        async function addRecord() {
+            try {
+                // 檢查共享代碼
+                if (!cloudAPI.currentBinId) {
+                    alert('請先創建共享或連接到現有共享');
+                    return;
+                }
+                
+                // 檢查記錄者姓名
+                if (!elements.recorder.value.trim()) {
+                    alert('請輸入記錄者姓名或稱呼');
+                    elements.recorder.focus();
+                    return;
+                }
+                
+                // 保存記錄者姓名到localStorage
+                localStorage.setItem('medicationTrackerRecorderName', elements.recorder.value.trim());
+                
+                const selectedMedication = medications[elements.medicationId.value];
+                
+                const newRecord = {
+                    id: Date.now().toString(),
+                    date: elements.date.value,
+                    time: elements.time.value,
+                    taken: elements.taken.checked,
+                    notes: elements.notes.value,
+                    recorder: elements.recorder.value,
+                    medicationId: elements.medicationId.value,
+                    medicationName: selectedMedication.name,
+                    medicationChineseName: selectedMedication.chineseName,
+                    timestamp: new Date().toISOString()
+                };
+                
+                // 獲取當前記錄
+                const records = await sharedData.loadRecords();
+                
+                // 添加新記錄
+                records.unshift(newRecord);
+                
+                // 保存更新後的記錄
+                const success = await sharedData.saveRecords(records);
+                
+                if (success) {
+                    // 重置表單
+                    elements.taken.checked = false;
+                    elements.notes.value = '';
+                    initializeDateAndTime();
+                    
+                    // 更新記錄列表
+                    renderRecords(records);
+                }
+            } catch (error) {
+                console.error('添加記錄失敗:', error);
+                alert('添加記錄失敗，請檢查網絡連接並重試。');
+            }
+        }
+
+        // 刪除記錄
+        async function deleteRecord(id) {
+            if (confirm('確定要刪除這條記錄嗎？')) {
+                try {
+                    // 獲取當前記錄
+                    const records = await sharedData.loadRecords();
+                    
+                    // 過濾掉要刪除的記錄
+                    const updatedRecords = records.filter(record => record.id !== id);
+                    
+                    // 保存更新後的記錄
+                    const success = await sharedData.saveRecords(updatedRecords);
+                    
+                    if (success) {
+                        // 更新記錄列表
+                        renderRecords(updatedRecords);
+                    }
+                } catch (error) {
+                    console.error('刪除記錄失敗:', error);
+                    alert('刪除記錄失敗，請檢查網絡連接並重試。');
+                }
+            }
+        }
+
+        // 匯出記錄
+        async function exportRecords() {
+            try {
+                const records = await sharedData.loadRecords();
+                
+                if (!records || records.length === 0) {
+                    alert('沒有記錄可以匯出');
+                    return;
+                }
+                
+                // CSV格式
+                const csvContent = "data:text/csv;charset=utf-8," 
+                    + "日期,時間,藥物名稱,中文名稱,是否服藥,記錄者,備註\n"
+                    + records.map(record => {
+                        // 確保備註中的引號不會破壞CSV格式
+                        const safeNotes = record.notes ? `"${record.notes.replace(/"/g, '""')}"` : '';
+                        return `${record.date},${record.time},${record.medicationName},${record.medicationChineseName},${record.taken ? '是' : '否'},${record.recorder || ''},${safeNotes}`;
+                    }).join("\n");
+                
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", `服藥記錄_${new Date().toISOString().slice(0, 10)}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // JSON格式的備份
+                const jsonContent = "data:text/json;charset=utf-8," 
+                    + encodeURIComponent(JSON.stringify(records, null, 2));
+                
+                const jsonLink = document.createElement("a");
+                jsonLink.setAttribute("href", jsonContent);
+                jsonLink.setAttribute("download", `服藥記錄_備份_${new Date().toISOString().slice(0, 10)}.json`);
+                document.body.appendChild(jsonLink);
+                
+                // 提示用戶是否也要下載JSON格式的備份
+                if (confirm('CSV格式已下載。是否也需要JSON格式的備份檔案？（更容易還原）')) {
+                    jsonLink.click();
+                }
+                
+                document.body.removeChild(jsonLink);
+            } catch (error) {
+                console.error('匯出失敗:', error);
+                alert('匯出記錄失敗。請檢查網絡連接並重試。');
+            }
+        }
+
+        // 匯入記錄
+        async function importRecords() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json,.csv';
+            input.onchange = async function(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = async function(e) {
+                    try {
+                        let records = [];
+                        
+                        // 判斷文件類型
+                        if (file.name.endsWith('.json')) {
+                            // 處理JSON文件
+                            records = JSON.parse(e.target.result);
+                        } else if (file.name.endsWith('.csv')) {
+                            // 處理CSV文件 (簡單處理，可能需要更複雜的CSV解析)
+                            const lines = e.target.result.split('\n');
+                            // 跳過標題行
+                            for (let i = 1; i < lines.length; i++) {
+                                if (!lines[i].trim()) continue;
+                                
+                                const columns = lines[i].split(',');
+                                if (columns.length >= 5) {
+                                    // 提取備註 (可能包含逗號)
+                                    let notes = '';
+                                    let recorder = '';
+                                    
+                                    if (columns.length > 6) {
+                                        // 如果記錄者和備註中含有逗號，重新組合
+                                        recorder = columns[5];
+                                        notes = columns.slice(6).join(',');
+                                        // 移除引號
+                                        if (notes.startsWith('"') && notes.endsWith('"')) {
+                                            notes = notes.substring(1, notes.length - 1);
+                                        }
+                                    } else if (columns.length > 5) {
+                                        recorder = columns[5];
+                                    }
+                                    
+                                    records.push({
+                                        id: Date.now().toString() + i, // 生成唯一ID
+                                        date: columns[0],
+                                        time: columns[1],
+                                        medicationName: columns[2],
+                                        medicationChineseName: columns[3],
+                                        taken: columns[4].trim() === '是',
+                                        recorder: recorder,
+                                        notes: notes,
+                                        medicationId: getMedicationIdByName(columns[2]) // 嘗試匹配藥物ID
+                                    });
+                                }
+                            }
+                        }
+                        
+                        if (records.length > 0) {
+                            // 檢查共享代碼
+                            if (!cloudAPI.currentBinId) {
+                                alert('請先創建共享或連接到現有共享');
+                                return;
+                            }
+                            
+                            const action = confirm(`發現${records.length}筆記錄。選擇"確定"合併記錄，選擇"取消"替換現有記錄。`);
+                            
+                            // 獲取當前記錄
+                            const currentRecords = await sharedData.loadRecords();
+                            
+                            let updatedRecords;
+                            if (action) {
+                                // 合併記錄
+                                updatedRecords = [...records, ...currentRecords];
+                            } else {
+                                // 替換記錄
+                                updatedRecords = records;
+                            }
+                            
+                            // 保存更新後的記錄
+                            const success = await sharedData.saveRecords(updatedRecords);
+                            
+                            if (success) {
+                                // 更新記錄列表
+                                renderRecords(updatedRecords);
+                                alert(`成功${action ? '合併' : '匯入'}${records.length}筆記錄！`);
+                            }
+                        } else {
+                            alert('未找到有效記錄，請確認文件格式正確。');
+                        }
+                    } catch (error) {
+                        console.error('匯入失敗:', error);
+                        alert('匯入失敗：文件格式不正確或數據損壞。');
+                    }
+                };
+                
+                if (file.name.endsWith('.json') || file.name.endsWith('.csv')) {
+                    reader.readAsText(file);
+                } else {
+                    alert('請選擇.json或.csv格式的文件');
+                }
+            };
+            
+            input.click();
+        }
+
+        // 列印記錄
+        async function printRecords() {
+            try {
+                const records = await sharedData.loadRecords();
+                
+                if (!records || records.length === 0) {
+                    alert('沒有記錄可以列印');
+                    return;
+                }
+                
+                // 創建臨時的列印視圖
+                const printWindow = window.open('', '_blank');
+                if (!printWindow) {
+                    alert('請允許彈出窗口以使用列印功能');
+                    return;
+                }
+                
+                // 準備列印內容
+                const printContent = `
+                <!DOCTYPE html>
+                <html lang="zh-TW">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>服藥記錄列印</title>
+                    <style>
+                        body {
+                            font-family: Arial, sans-serif;
+                            margin: 20px;
+                            line-height: 1.4;
+                        }
+                        h1 {
+                            text-align: center;
+                            margin-bottom: 20px;
+                            color: #333;
+                        }
+                        .print-date {
+                            text-align: right;
+                            font-size: 12px;
+                            color: #666;
+                            margin-bottom: 20px;
+                        }
+                        .record {
+                            border: 1px solid #ddd;
+                            padding: 10px;
+                            margin-bottom: 15px;
+                            page-break-inside: avoid;
+                        }
+                        .record-header {
+                            display: flex;
+                            justify-content: space-between;
+                            border-bottom: 1px solid #eee;
+                            padding-bottom: 5px;
+                            margin-bottom: 8px;
+                        }
+                        .medication-name {
+                            font-weight: bold;
+                        }
+                        .medication-chinese {
+                            font-size: 12px;
+                            color: #666;
+                        }
+                        .status {
+                            display: inline-block;
+                            padding: 2px 8px;
+                            border-radius: 12px;
+                            font-size: 12px;
+                        }
+                        .status-taken {
+                            background-color: #d1fae5;
+                            color: #065f46;
+                        }
+                        .status-not-taken {
+                            background-color: #fee2e2;
+                            color: #991b1b;
+                        }
+                        .notes {
+                            background-color: #f9fafb;
+                            padding: 8px;
+                            margin-top: 8px;
+                            border-radius: 4px;
+                            font-size: 14px;
+                        }
+                        .notes-title {
+                            font-weight: bold;
+                            margin-right: 4px;
+                        }
+                        .recorder {
+                            font-size: 12px;
+                            color: #666;
+                            margin-top: 5px;
+                            text-align: right;
+                        }
+                        .precautions {
+                            margin-top: 30px;
+                            border-top: 1px solid #ddd;
+                            padding-top: 15px;
+                        }
+                        .precautions h2 {
+                            font-size: 18px;
+                            margin-bottom: 10px;
+                        }
+                        .precautions h3 {
+                            font-size: 16px;
+                            margin: 15px 0 8px 0;
+                        }
+                        .precautions ul {
+                            margin: 0;
+                            padding-left: 25px;
+                        }
+                        .precautions li {
+                            margin-bottom: 5px;
+                            font-size: 14px;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <h1>服藥記錄表</h1>
+                    <div class="print-date">列印日期: ${new Date().toLocaleString()}</div>
+                    <div class="records">
+                        ${records.map(record => `
+                            <div class="record">
+                                <div class="record-header">
+                                    <div class="date-time">${record.date} ${record.time}</div>
+                                    <div class="status ${record.taken ? 'status-taken' : 'status-not-taken'}">
+                                        ${record.taken ? '已服藥' : '未服藥'}
+                                    </div>
+                                </div>
+                                <div class="medication-name">${record.medicationName}</div>
+                                <div class="medication-chinese">${record.medicationChineseName}</div>
+                                ${record.notes ? `
+                                    <div class="notes">
+                                        <span class="notes-title">備註:</span>${record.notes}
+                                    </div>
+                                ` : ''}
+                                ${record.recorder ? `
+                                    <div class="recorder">
+                                        記錄者: ${record.recorder}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                    
+                    <div class="precautions">
+                        <h2>藥物注意事項</h2>
+                        <h3>ABILIFY (大塚安立復錠)</h3>
+                        <ul>
+                            <li>可空腹或隨餐(飯後立即)服用</li>
+                            <li>用藥期間開車或操作機械請小心</li>
+                            <li>用藥期間請勿飲酒</li>
+                            <li>避免劇烈運動或曝露於過熱環境</li>
+                            <li>按照醫囑確實服藥，不可自行停用</li>
+                        </ul>
+                        
+                        <h3>RITALIN (利他能錠)</h3>
+                        <ul>
+                            <li>於飯前30至45分鐘服用</li>
+                            <li>請於晚上六點前服用</li>
+                            <li>請遵醫囑服用</li>
+                            <li>不可擅自停藥</li>
+                        </ul>
+                    </div>
+                </body>
+                </html>
+                `;
+                
+                // 寫入並列印
+                printWindow.document.open();
+                printWindow.document.write(printContent);
+                printWindow.document.close();
+                
+                // 等待資源載入完成後列印
+                printWindow.onload = function() {
+                    printWindow.print();
+                    // 某些瀏覽器會在列印完成後自動關閉視窗，有些不會
+                    // 這裡不自動關閉，讓用戶可以看到列印預覽
+                };
+            } catch (error) {
+                console.error('列印失敗:', error);
+                alert('列印失敗，請檢查網絡連接並重試。');
+            }
+        }
+
+        // 根據藥物名稱獲取ID
+        function getMedicationIdByName(name) {
+            for (const id in medications) {
+                if (medications[id].name.includes(name) || name.includes(medications[id].name)) {
+                    return id;
+                }
+            }
+            return 'abilify'; // 默認返回第一個藥物
+        }
+
+        // 初始化應用程序
+        async function initialize() {
+            try {
+                // 初始化日期和時間
+                initializeDateAndTime();
+                
+                // 從localStorage加載記錄者名稱
+                loadRecorderName();
+                
+                // 更新藥物資訊
+                updateMedicationInfo();
+                
+                // 從localStorage加載共享代碼
+                const savedBinId = localStorage.getItem('medicationTrackerBinId');
+                if (savedBinId) {
+                    elements.shareCodeInput.value = savedBinId;
+                    elements.currentCodeDisplay.textContent = `當前代碼: ${savedBinId}`;
+                    cloudAPI.currentBinId = savedBinId;
+                    
+                    // 嘗試從雲端加載記錄
+                    try {
+                        await sharedData.refreshRecords();
+                    } catch (error) {
+                        console.error('自動加載記錄失敗:', error);
+                        // 不顯示錯誤提示，因為這是自動嘗試
+                    }
+                }
+                
+                // 設置事件監聽器
+                elements.medicationId.addEventListener('change', updateMedicationInfo);
+                elements.addRecord.addEventListener('click', addRecord);
+                elements.exportRecords.addEventListener('click', exportRecords);
+                elements.importRecords.addEventListener('click', importRecords);
+                elements.printRecords.addEventListener('click', printRecords);
+                elements.connectBtn.addEventListener('click', async () => {
+                    const binId = elements.shareCodeInput.value.trim();
+                    await sharedData.connect(binId);
+                });
+                elements.createNewBtn.addEventListener('click', async () => {
+                    await sharedData.createNew();
+                });
+                elements.refreshBtn.addEventListener('click', async () => {
+                    await sharedData.refreshRecords();
+                });
+                
+                // 隱藏載入中動畫
+                hideLoading();
+            } catch (error) {
+                console.error('初始化失敗:', error);
+                alert('初始化應用失敗，請刷新頁面重試。');
+                hideLoading();
+            }
+        }
+
+        // 當頁面加載完成時初始化應用
+        document.addEventListener('DOMContentLoaded', initialize);
+    </script>
